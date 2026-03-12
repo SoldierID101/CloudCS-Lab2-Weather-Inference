@@ -26,8 +26,8 @@ def create_data() -> dict[str, int | float]:
 
 # Тест функции make_inference.
 # Мы подменяем метод predict у Pipeline и проверяем:
-# 1) что данные действительно дошли до модели в виде DataFrame
-# 2) что результат правильно преобразуется в JSON-ответ
+# - что данные действительно дошли до модели в виде DataFrame
+# - что результат правильно преобразуется в JSON-ответ
 def test_make_inference(monkeypatch, create_data):
     def mock_get_predictions(_, data: pd.DataFrame):
         # Проверяем, что DataFrame содержит те же значения,
