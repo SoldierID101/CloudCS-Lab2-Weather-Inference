@@ -20,20 +20,25 @@ class Instance(BaseModel):
     longitude: float
     height: float
 
+
 # Создаем экземпляр FastAPI-приложения
 app = FastAPI()
+
 
 # Настраиваем схему авторизации через Bearer Token.
 # tokenUrl здесь нужен Swagger/FastAPI для описания безопасности.
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth")
 
+
 # Читаем путь к модели из переменной окружения.
 # Это удобно: один и тот же код можно запускать с разными моделями.
 model_path: str = os.getenv("MODEL_PATH")
 
+
 # Если путь не передан, сервис не должен запускаться.
 if model_path is None:
     raise ValueError("The environment variable $MODEL_PATH is empty!")
+
 
 # Функция проверки токена.
 # В учебной работе используется "заглушка":
@@ -41,6 +46,7 @@ if model_path is None:
 async def is_token_correct(token: str) -> bool:
     dummy_correct_token = "00000"
     return token == dummy_correct_token
+
 
 # Зависимость FastAPI для проверки токена перед доступом к защищенному endpoint.
 # Если токен неверный, возвращаем ошибку 401 Unauthorized.
@@ -52,10 +58,12 @@ async def check_token(token: str = Depends(oauth2_scheme)) -> None:
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+
 # Простейший endpoint для проверки, что сервис запущен и отвечает.
 @app.get("/healthcheck")
 def healthcheck() -> dict[str, str]:
     return {"status": "ok"}
+
 
 # Основной endpoint для инференса.
 # Сюда клиент отправляет погодные признаки,

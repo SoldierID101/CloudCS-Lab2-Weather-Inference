@@ -12,20 +12,25 @@ def init_test_client(monkeypatch) -> TestClient:
     def mock_make_inference(*args, **kwargs) -> dict[str, float]:
         return {"temperature": 27.5}
 
+
     # Фейковая загрузка модели: ничего не делает
     def mock_load_model(*args, **kwargs) -> None:
         return None
 
+
     # Подставляем фиктивный путь к модели
     monkeypatch.setenv("MODEL_PATH", "faked/model.pkl")
+
 
     # Подменяем реальные функции моками
     monkeypatch.setattr("model_utils.make_inference", mock_make_inference)
     monkeypatch.setattr("model_utils.load_model", mock_load_model)
 
+
     # Импортируем приложение и создаем тестовый HTTP-клиент
     from main import app
     return TestClient(app)
+
 
 # Пример корректного тела запроса.
 # Используется во многих тестах, чтобы не дублировать JSON.
@@ -41,11 +46,13 @@ sample_json = {
     "height": 61.25
 }
 
+
 # Проверка, что endpoint /healthcheck доступен и работает корректно.
 def test_healthcheck(init_test_client) -> None:
     response = init_test_client.get("/healthcheck")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
 
 # Проверка корректного токена.
 # Ожидаем успешный ответ и наличие поля temperature.
@@ -57,6 +64,7 @@ def test_token_correctness(init_test_client) -> None:
     )
     assert response.status_code == 200
     assert "temperature" in response.json()
+
 
 # Проверка некорректного токена.
 # Сервис должен вернуть 401 Unauthorized.
@@ -71,6 +79,7 @@ def test_token_not_correctness(init_test_client):
         "detail": "Invalid authentication credentials"
     }
 
+
 # Проверка отсутствия токена.
 # В этом случае FastAPI сам возвращает ошибку авторизации.
 def test_token_absent(init_test_client):
@@ -82,6 +91,7 @@ def test_token_absent(init_test_client):
     assert response.json() == {
         "detail": "Not authenticated"
     }
+
 
 # Проверка самого инференса.
 # Так как make_inference замокан, ожидаем ровно то значение,

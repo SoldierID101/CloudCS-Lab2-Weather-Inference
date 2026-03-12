@@ -14,9 +14,11 @@ def make_inference(in_model: Pipeline, in_data: dict) -> dict[str, float]:
     # Именно в таком формате pipeline получает входные признаки.
     temperature = in_model.predict(pd.DataFrame(in_data, index=[0]))[0]
 
+
     # Округляем результат до 3 знаков после запятой,
     # чтобы ответ выглядел аккуратно.
     return {"temperature": round(float(temperature), 3)}
+
 
 # Функция загрузки модели из файла.
 # Загружается сохраненный Scikit-Learn Pipeline.
