@@ -32,7 +32,6 @@ def test_make_inference(monkeypatch, create_data) -> None:
         return [27.8]
 
     in_model = Pipeline([])
-
     monkeypatch.setattr(Pipeline, "predict", mock_get_predictions)
 
     result = make_inference(in_model, create_data)

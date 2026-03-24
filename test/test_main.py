@@ -29,11 +29,7 @@ def test_app(monkeypatch):
         return None
 
     monkeypatch.setenv("MODEL_PATH", "faked/model.pkl")
-    monkeypatch.setenv("INFERENCE_CLIENT_ID", "test-client")
-    monkeypatch.setenv("INFERENCE_CLIENT_SECRET", "test-secret")
     monkeypatch.setenv("PRIVILEGED_CLIENT_ID", "privileged-client")
-    monkeypatch.setenv("KEYCLOAK_SERVER_URL", "http://localhost:8080")
-    monkeypatch.setenv("KEYCLOAK_REALM", "inference")
 
     monkeypatch.setattr("model_utils.make_inference", mock_make_inference)
     monkeypatch.setattr("model_utils.load_model", mock_load_model)
@@ -59,20 +55,44 @@ def test_healthcheck(client) -> None:
     assert response.json() == {"status": "ok"}
 
 
-def test_predictions_for_privileged_client(client, test_app) -> None:
-    def mock_verify_privileged_client():
+def test_predictions_for_privileged_client(client, test_app, monkeypatch) -> None:
+    def mock_decode_token(token: str):
         return {"client_id": "privileged-client"}
 
-    test_app.app.dependency_overrides[
-        test_app.verify_privileged_client
-    ] = mock_verify_privileged_client
+    monkeypatch.setattr(test_app, "decode_token", mock_decode_token)
 
-    response = client.post("/predictions", json=sample_json)
+    response = client.post(
+        "/predictions",
+        headers={"Authorization": "Bearer fake-token"},
+        json=sample_json,
+    )
 
     assert response.status_code == 200
     assert response.json() == {
         "prediction": {"temperature": 27.5},
         "client_id": "privileged-client",
+    }
+
+
+def test_predictions_for_unprivileged_client(
+    client,
+    test_app,
+    monkeypatch,
+) -> None:
+    def mock_decode_token(token: str):
+        return {"client_id": "unprivileged-client"}
+
+    monkeypatch.setattr(test_app, "decode_token", mock_decode_token)
+
+    response = client.post(
+        "/predictions",
+        headers={"Authorization": "Bearer fake-token"},
+        json=sample_json,
+    )
+
+    assert response.status_code == 403
+    assert response.json() == {
+        "detail": "This client is not allowed to access /predictions",
     }
 
 
@@ -82,24 +102,24 @@ def test_predictions_without_token(client) -> None:
     assert response.json() == {"detail": "Not authenticated"}
 
 
-def test_predictions_for_unprivileged_client(client) -> None:
+def test_predictions_with_invalid_token_format(
+    client,
+    test_app,
+    monkeypatch,
+) -> None:
+    def mock_decode_token(token: str):
+        raise test_app.HTTPException(
+            status_code=test_app.status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token format",
+        )
+
+    monkeypatch.setattr(test_app, "decode_token", mock_decode_token)
+
     response = client.post(
         "/predictions",
-        headers={"Authorization": "Bearer fake-unprivileged-token"},
+        headers={"Authorization": "Bearer bad-token"},
         json=sample_json,
     )
-    assert response.status_code == 503
 
-
-def test_inference_response_contains_temperature(client, test_app) -> None:
-    def mock_verify_privileged_client():
-        return {"client_id": "privileged-client"}
-
-    test_app.app.dependency_overrides[
-        test_app.verify_privileged_client
-    ] = mock_verify_privileged_client
-
-    response = client.post("/predictions", json=sample_json)
-
-    assert response.status_code == 200
-    assert response.json()["prediction"]["temperature"] == 27.5
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Invalid token format"}

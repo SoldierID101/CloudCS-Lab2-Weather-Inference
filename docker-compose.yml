@@ -9,6 +9,8 @@ services:
       POSTGRES_PASSWORD: keycloak
     ports:
       - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
 
   keycloak:
     image: quay.io/keycloak/keycloak:23.0
@@ -36,3 +38,8 @@ services:
       - .env
     depends_on:
       - keycloak
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  postgres_data:
