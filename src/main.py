@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from model_utils import load_model, make_inference
 
+
 # Загружаем .env из корня проекта
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENV_PATH = os.path.join(BASE_DIR, ".env")
