@@ -9,22 +9,24 @@ from fastapi.testclient import TestClient
 # чтобы тесты были быстрыми и не зависели от реального файла модели.
 @pytest.fixture
 def init_test_client(monkeypatch) -> TestClient:
-    # Фейковый инференс: всегда возвращает одну и ту же температуру
-    def mock_make_inference(*args, **kwargs) -> dict[str, float]:
+    def mock_make_inference(*args, **kwargs):
         return {"temperature": 27.5}
 
-    # Фейковая загрузка модели: ничего не делает
-    def mock_load_model(*args, **kwargs) -> None:
+    def mock_load_model(*args, **kwargs):
         return None
 
-    # Подставляем фиктивный путь к модели
     monkeypatch.setenv("MODEL_PATH", "faked/model.pkl")
 
-    # Подменяем реальные функции моками
+    # 🔥 ДОБАВИТЬ ЭТО
+    monkeypatch.setenv("INFERENCE_CLIENT_ID", "test-client")
+    monkeypatch.setenv("INFERENCE_CLIENT_SECRET", "test-secret")
+    monkeypatch.setenv("PRIVILEGED_CLIENT_ID", "privileged-client")
+    monkeypatch.setenv("KEYCLOAK_SERVER_URL", "http://localhost:8080")
+    monkeypatch.setenv("KEYCLOAK_REALM", "inference")
+
     monkeypatch.setattr("model_utils.make_inference", mock_make_inference)
     monkeypatch.setattr("model_utils.load_model", mock_load_model)
 
-    # Импортируем приложение и создаем тестовый HTTP-клиент
     from main import app
     return TestClient(app)
 
