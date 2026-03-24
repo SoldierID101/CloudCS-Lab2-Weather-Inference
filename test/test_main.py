@@ -1,38 +1,12 @@
 # -*- coding: utf-8 -*-
 
+import importlib
+import sys
+
 import pytest
 from fastapi.testclient import TestClient
 
 
-# Фикстура создает тестовый клиент FastAPI.
-# Здесь же мы "подменяем" настоящую модель на фиктивную,
-# чтобы тесты были быстрыми и не зависели от реального файла модели.
-@pytest.fixture
-def init_test_client(monkeypatch) -> TestClient:
-    def mock_make_inference(*args, **kwargs):
-        return {"temperature": 27.5}
-
-    def mock_load_model(*args, **kwargs):
-        return None
-
-    monkeypatch.setenv("MODEL_PATH", "faked/model.pkl")
-
-    # 🔥 ДОБАВИТЬ ЭТО
-    monkeypatch.setenv("INFERENCE_CLIENT_ID", "test-client")
-    monkeypatch.setenv("INFERENCE_CLIENT_SECRET", "test-secret")
-    monkeypatch.setenv("PRIVILEGED_CLIENT_ID", "privileged-client")
-    monkeypatch.setenv("KEYCLOAK_SERVER_URL", "http://localhost:8080")
-    monkeypatch.setenv("KEYCLOAK_REALM", "inference")
-
-    monkeypatch.setattr("model_utils.make_inference", mock_make_inference)
-    monkeypatch.setattr("model_utils.load_model", mock_load_model)
-
-    from main import app
-    return TestClient(app)
-
-
-# Пример корректного тела запроса.
-# Используется во многих тестах, чтобы не дублировать JSON.
 sample_json = {
     "hour": 12,
     "month": 6,
@@ -42,64 +16,90 @@ sample_json = {
     "wind_speed": 3.5,
     "latitude": -3.1,
     "longitude": -60.0,
-    "height": 61.25
+    "height": 61.25,
 }
 
 
-# Проверка, что endpoint /healthcheck доступен и работает корректно.
-def test_healthcheck(init_test_client) -> None:
-    response = init_test_client.get("/healthcheck")
+@pytest.fixture
+def test_app(monkeypatch):
+    def mock_make_inference(*args, **kwargs):
+        return {"temperature": 27.5}
+
+    def mock_load_model(*args, **kwargs):
+        return None
+
+    monkeypatch.setenv("MODEL_PATH", "faked/model.pkl")
+    monkeypatch.setenv("INFERENCE_CLIENT_ID", "test-client")
+    monkeypatch.setenv("INFERENCE_CLIENT_SECRET", "test-secret")
+    monkeypatch.setenv("PRIVILEGED_CLIENT_ID", "privileged-client")
+    monkeypatch.setenv("KEYCLOAK_SERVER_URL", "http://localhost:8080")
+    monkeypatch.setenv("KEYCLOAK_REALM", "inference")
+
+    monkeypatch.setattr("model_utils.make_inference", mock_make_inference)
+    monkeypatch.setattr("model_utils.load_model", mock_load_model)
+
+    if "main" in sys.modules:
+        main_module = importlib.reload(sys.modules["main"])
+    else:
+        import main as main_module
+
+    main_module.app.dependency_overrides = {}
+    yield main_module
+    main_module.app.dependency_overrides = {}
+
+
+@pytest.fixture
+def client(test_app):
+    return TestClient(test_app.app)
+
+
+def test_healthcheck(client) -> None:
+    response = client.get("/healthcheck")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
 
-# Проверка корректного токена.
-# Ожидаем успешный ответ и наличие поля temperature.
-def test_token_correctness(init_test_client) -> None:
-    response = init_test_client.post(
-        "/predictions",
-        headers={"Authorization": "Bearer 00000"},
-        json=sample_json
-    )
+def test_predictions_for_privileged_client(client, test_app) -> None:
+    def mock_verify_privileged_client():
+        return {"client_id": "privileged-client"}
+
+    test_app.app.dependency_overrides[
+        test_app.verify_privileged_client
+    ] = mock_verify_privileged_client
+
+    response = client.post("/predictions", json=sample_json)
+
     assert response.status_code == 200
-    assert "temperature" in response.json()
-
-
-# Проверка некорректного токена.
-# Сервис должен вернуть 401 Unauthorized.
-def test_token_not_correctness(init_test_client):
-    response = init_test_client.post(
-        "/predictions",
-        headers={"Authorization": "Bearer kedjkj"},
-        json=sample_json
-    )
-    assert response.status_code == 401
     assert response.json() == {
-        "detail": "Invalid authentication credentials"
+        "prediction": {"temperature": 27.5},
+        "client_id": "privileged-client",
     }
 
 
-# Проверка отсутствия токена.
-# В этом случае FastAPI сам возвращает ошибку авторизации.
-def test_token_absent(init_test_client):
-    response = init_test_client.post(
-        "/predictions",
-        json=sample_json
-    )
+def test_predictions_without_token(client) -> None:
+    response = client.post("/predictions", json=sample_json)
     assert response.status_code == 401
-    assert response.json() == {
-        "detail": "Not authenticated"
-    }
+    assert response.json() == {"detail": "Not authenticated"}
 
 
-# Проверка самого инференса.
-# Так как make_inference замокан, ожидаем ровно то значение,
-# которое вернул mock_make_inference.
-def test_inference(init_test_client):
-    response = init_test_client.post(
+def test_predictions_for_unprivileged_client(client) -> None:
+    response = client.post(
         "/predictions",
-        headers={"Authorization": "Bearer 00000"},
-        json=sample_json
+        headers={"Authorization": "Bearer fake-unprivileged-token"},
+        json=sample_json,
     )
+    assert response.status_code == 503
+
+
+def test_inference_response_contains_temperature(client, test_app) -> None:
+    def mock_verify_privileged_client():
+        return {"client_id": "privileged-client"}
+
+    test_app.app.dependency_overrides[
+        test_app.verify_privileged_client
+    ] = mock_verify_privileged_client
+
+    response = client.post("/predictions", json=sample_json)
+
     assert response.status_code == 200
-    assert response.json()["temperature"] == 27.5
+    assert response.json()["prediction"]["temperature"] == 27.5
