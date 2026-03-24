@@ -1,21 +1,19 @@
 # -*- coding: utf-8 -*-
 
 import os
-import requests
 
+import requests
+from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
-from dotenv import load_dotenv
 
 from model_utils import load_model, make_inference
-
 
 # Загружаем .env из корня проекта
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENV_PATH = os.path.join(BASE_DIR, ".env")
 load_dotenv(ENV_PATH)
-
 
 # Конфигурация
 MODEL_PATH_ENV = os.getenv("MODEL_PATH")
@@ -39,9 +37,9 @@ if not INFERENCE_CLIENT_ID or not INFERENCE_CLIENT_SECRET or not PRIVILEGED_CLIE
     raise ValueError("Keycloak client settings are missing in .env")
 
 INTROSPECT_URL = (
-    f"{KEYCLOAK_SERVER_URL}/realms/{KEYCLOAK_REALM}/protocol/openid-connect/token/introspect"
+    f"{KEYCLOAK_SERVER_URL}/realms/"
+    f"{KEYCLOAK_REALM}/protocol/openid-connect/token/introspect"
 )
-
 
 # FastAPI
 app = FastAPI()
@@ -73,13 +71,13 @@ def introspect_token(token: str) -> dict:
     except requests.RequestException as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"Keycloak is unavailable: {str(e)}"
+            detail=f"Keycloak is unavailable: {str(e)}",
         )
 
     if response.status_code != 200:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Failed to introspect token"
+            detail="Failed to introspect token",
         )
 
     data = response.json()
@@ -87,7 +85,7 @@ def introspect_token(token: str) -> dict:
     if not data.get("active", False):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or inactive token"
+            detail="Invalid or inactive token",
         )
 
     return data
@@ -102,7 +100,7 @@ def verify_privileged_client(token: str = Depends(oauth2_scheme)) -> dict:
     if token_client_id != PRIVILEGED_CLIENT_ID:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="This client is not allowed to access /predictions"
+            detail="This client is not allowed to access /predictions",
         )
 
     return token_data
@@ -117,18 +115,21 @@ def healthcheck():
 @app.post("/predictions")
 def predict(
     instance: Instance,
-    token_data: dict = Depends(verify_privileged_client)
+    token_data: dict = Depends(verify_privileged_client),
 ):
     try:
         model = load_model(MODEL_PATH)
         prediction = make_inference(model, instance.dict())
         return {
             "prediction": prediction,
-            "client_id": token_data.get("client_id", token_data.get("azp"))
+            "client_id": token_data.get(
+                "client_id",
+                token_data.get("azp"),
+            ),
         }
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail=str(e),
         )
     
