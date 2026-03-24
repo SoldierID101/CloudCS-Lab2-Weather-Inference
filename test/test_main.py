@@ -55,7 +55,11 @@ def test_healthcheck(client) -> None:
     assert response.json() == {"status": "ok"}
 
 
-def test_predictions_for_privileged_client(client, test_app, monkeypatch) -> None:
+def test_predictions_for_privileged_client(
+    client,
+    test_app,
+    monkeypatch,
+) -> None:
     def mock_decode_token(token: str):
         return {"client_id": "privileged-client"}
 
