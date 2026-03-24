@@ -14,7 +14,7 @@ from model_utils import load_model, make_inference
 # Загружаем .env из корня проекта
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENV_PATH = os.path.join(BASE_DIR, ".env")
-load_dotenv(ENV_PATH)
+load_dotenv(ENV_PATH, override=True)
 
 # Конфигурация
 MODEL_PATH_ENV = os.getenv("MODEL_PATH")
@@ -27,14 +27,21 @@ if os.path.isabs(MODEL_PATH_ENV):
 else:
     MODEL_PATH = os.path.join(BASE_DIR, MODEL_PATH_ENV)
 
-KEYCLOAK_SERVER_URL = os.getenv("KEYCLOAK_SERVER_URL", "http://localhost:8080")
+KEYCLOAK_SERVER_URL = os.getenv(
+    "KEYCLOAK_SERVER_URL",
+    "http://localhost:8080",
+)
 KEYCLOAK_REALM = os.getenv("KEYCLOAK_REALM", "inference")
 
 INFERENCE_CLIENT_ID = os.getenv("INFERENCE_CLIENT_ID")
 INFERENCE_CLIENT_SECRET = os.getenv("INFERENCE_CLIENT_SECRET")
 PRIVILEGED_CLIENT_ID = os.getenv("PRIVILEGED_CLIENT_ID")
 
-if not INFERENCE_CLIENT_ID or not INFERENCE_CLIENT_SECRET or not PRIVILEGED_CLIENT_ID:
+if (
+    not INFERENCE_CLIENT_ID
+    or not INFERENCE_CLIENT_SECRET
+    or not PRIVILEGED_CLIENT_ID
+):
     raise ValueError("Keycloak client settings are missing in .env")
 
 INTROSPECT_URL = (
@@ -42,12 +49,10 @@ INTROSPECT_URL = (
     f"{KEYCLOAK_REALM}/protocol/openid-connect/token/introspect"
 )
 
-# FastAPI
 app = FastAPI()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 
-# Модель входных данных
 class Instance(BaseModel):
     hour: int
     month: int
@@ -60,7 +65,6 @@ class Instance(BaseModel):
     height: float
 
 
-# Проверка токена через Keycloak
 def introspect_token(token: str) -> dict:
     try:
         response = requests.post(
@@ -94,8 +98,6 @@ def introspect_token(token: str) -> dict:
 
 def verify_privileged_client(token: str = Depends(oauth2_scheme)) -> dict:
     token_data = introspect_token(token)
-
-    # Для client credentials Keycloak обычно возвращает client_id
     token_client_id = token_data.get("client_id") or token_data.get("azp")
 
     if token_client_id != PRIVILEGED_CLIENT_ID:
@@ -107,7 +109,6 @@ def verify_privileged_client(token: str = Depends(oauth2_scheme)) -> dict:
     return token_data
 
 
-# Эндпоинты
 @app.get("/healthcheck")
 def healthcheck():
     return {"status": "ok"}
